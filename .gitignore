@@ -20,7 +20,8 @@ Karane_Kicad/_autosave-*
 Karane_Kicad/fp-info-cache
 Karane_Kicad/*.kicad_prl
 Karane_Kicad/*.kicad_pcb-bin
-
+Karane_Kicad/Karane_Kicad-backups/
+Karane_Kicad/.history/
 
 
 .DS_Store
