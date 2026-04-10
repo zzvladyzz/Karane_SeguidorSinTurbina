@@ -62,7 +62,7 @@ typedef struct{
 #define	Volt_Proteccion_Batt 	6.0
 #define	Volt_Proteccion_current 3.2
 
-#define PWM_offset 	300
+#define PWM_offset 	350
 #define	Linea_setpoint	500
 #define Encoder_setpoint 25
 #define NumSensores 16
@@ -513,7 +513,7 @@ void funcion_InicializarMotores(void)
 		 MotorSeguidor.pwmLA=(uint16_t)var;
 		 MotorSeguidor.pwmRA=(uint16_t)var;
 		 funcion_motores(&MotorSeguidor);
-		 HAL_Delay(50);
+		 HAL_Delay(5);
 	 	}
 	 odometria.ticks_L=0;
 	 odometria.ticks_R=0;
