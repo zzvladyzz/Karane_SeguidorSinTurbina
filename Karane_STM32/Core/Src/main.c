@@ -61,6 +61,7 @@ typedef struct{
 #define	ADC_VREF	3.35
 #define	Volt_Proteccion_Batt 	6.0
 #define	Volt_Proteccion_current 3.2
+
 #define PWM_offset 	300
 #define	Linea_setpoint	500
 #define Encoder_setpoint 25
@@ -272,6 +273,7 @@ int main(void)
 	else{
 		validarPulso=false;
 	}
+
 	//funcion_DEBUG();
 
 
@@ -302,6 +304,7 @@ int main(void)
 						  if(!validarInicio)
 						  {
 							  HAL_Delay(5000);
+
 							  funcion_InicializarMotores();
 							  validarInicio=true;
 						  }
@@ -417,6 +420,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 					if(sumaLecturas>0){
 						UltimaPosicion = (int)(sumaPonderada / sumaLecturas);
 					}
+
 						MuxSel=0;
 						sumaLecturas=0;
 						sumaPonderada=0;
@@ -647,12 +651,15 @@ void funcion_DEBUG(void)
 		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
 		}*/
 
-		DEBUG_RegletaSensores(UltimaPosicion);
+
+		//DEBUG_RegletaSensores(UltimaPosicion);
 		//DEBUG_IMU_Conv(MPU6500_Values_float.MPU6500_floatAX,MPU6500_Values_float.MPU6500_floatAY,MPU6500_Values_float.MPU6500_floatAZ,MPU6500_Values_float.MPU6500_floatGX,MPU6500_Values_float.MPU6500_floatGY,MPU6500_Values_float.MPU6500_floatGZ);
 		//DEBUG_ADC_Value(ADC_Valores_Volt[0], ADC_Valores_Volt[1], ADC_Valores_Volt[2], ADC_Valores_Volt[3]);
 		//DEBUG_ADC_RAW(ADC_DMA[0], ADC_DMA[1], ADC_DMA[2], ADC_DMA[3]);
 
+
 		//DEBUG_Encoders(odometria.ticks_L, odometria.ticks_R, 0);
+
 
 		Timer_DEBUG=false;
 	}
