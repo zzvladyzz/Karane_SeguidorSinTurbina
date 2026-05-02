@@ -59,6 +59,21 @@ void DEBUG_IMU_Conv(float ax,float ay,float az,float gx,float gy,float gz )
 	sprintf(bufferTxt," GZ=%0.2f \r \n",gz);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 }
+void DEBUG_IMU_Raw(int16_t ax,int16_t ay,int16_t az,int16_t gx,int16_t gy,int16_t gz )
+{
+	sprintf(bufferTxt," AX=%d ",ax);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+	sprintf(bufferTxt," AY=%d ",ay);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+	sprintf(bufferTxt," AZ=%d ",az);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+	sprintf(bufferTxt," GX=%d ",gx);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+	sprintf(bufferTxt," GY=%d ",gy);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+	sprintf(bufferTxt," GZ=%d \r \n",gz);
+	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
+}
 void DEBUG_PID1()
 {
 

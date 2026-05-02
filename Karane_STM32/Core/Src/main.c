@@ -98,7 +98,7 @@ volatile odometria_init_t odometria={0.0,0.0,0.0,0.0,0,0};
 MPU6500_Init_Values_t 	MPU6500_Datos;
 MPU6500_Init_float_t	MPU6500_Values_float;
 MPU6500_status_e	MPU6500_Status;
-motores_init_t	MotorSeguidor={0,0,0,0,false};
+motores_init_t	Motor={0,0,0,0,false};
 const motores_init_t	MotorStop={0,0,0,0,false};
 PID	Linea={KPLINEA,KILINEA,KDLINEA,	0,0,300,PWM_offset+200};
 PID	PwmBaseML={KPML,KIML,KDML,		0,0,300,PWM_offset+200};
@@ -220,9 +220,10 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(2000);
   Menu_aviso(Aviso_ok);
 
-  MPU6500_Status=MPU6500_Init(&MPU6500_Datos,10,DPS1000,G4);
+  MPU6500_Status=MPU6500_Init(&MPU6500_Datos,50,DPS250,G2);
   if (MPU6500_Status==MPU6500_fail) {
   	for (;;) {
   		DEBUG_Imprimir("Fallo al iniciar MPU\r\n");
@@ -231,21 +232,24 @@ int main(void)
   }
   DEBUG_Imprimir("Exito al iniciar MPU\r\n");
 
-  HAL_Delay(1000);
+
+  DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
+
+  HAL_Delay(3000);
   Menu_aviso(Apagar_LED);
  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
- MotorSeguidor=MotorStop;
+ Motor=MotorStop;
  __HAL_TIM_MOE_ENABLE(&htim1);
 
- HAL_ADC_Start_DMA(&hadc1, &ADC_DMA[0], 4);
- HAL_ADC_Start_IT(&hadc1);
+ //HAL_ADC_Start_DMA(&hadc1, &ADC_DMA[0], 4);
+ //HAL_ADC_Start_IT(&hadc1);
  HAL_TIM_Base_Start_IT(&htim3);
 
  //inhabilitamos motores
- MotorSeguidor.enable_PWM=false;
+ Motor.enable_PWM=false;
  enableProg=false;
 
 
@@ -274,7 +278,7 @@ int main(void)
 		validarPulso=false;
 	}
 
-	//funcion_DEBUG();
+	funcion_DEBUG();
 
 
 				  /* Aca se ejecutara el codigo si se dio aceptar y dependiendo el menu donde este*/
@@ -317,8 +321,8 @@ int main(void)
 				else{
 					validarInicio=false;
 					enableProg=false;
-					MotorSeguidor=MotorStop;
-					funcion_motores(&MotorSeguidor);
+					Motor=MotorStop;
+					funcion_motores(&Motor);
 				}
 
   }
@@ -507,12 +511,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 void funcion_InicializarMotores(void)
 {
 	 /*esto deberia ir en una funciona para cuando se inicie dar un escalonado*/
-	MotorSeguidor.enable_PWM=true;
+	Motor.enable_PWM=true;
 	for(uint16_t var=0;var<PWM_offset;var+=20)
 	 	{
-		 MotorSeguidor.pwmLA=(uint16_t)var;
-		 MotorSeguidor.pwmRA=(uint16_t)var;
-		 funcion_motores(&MotorSeguidor);
+		 Motor.pwmLA=(uint16_t)var;
+		 Motor.pwmRA=(uint16_t)var;
+		 funcion_motores(&Motor);
 		 HAL_Delay(5);
 	 	}
 	 odometria.ticks_L=0;
@@ -616,44 +620,13 @@ void funcion_DEBUG(void)
 {
 	if(Timer_DEBUG)
 		  			  {
-		/*char buffer[30];
-		sprintf(buffer,"valor menu %lu",datosk.selectorMenu);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-
-		if(datosk.selectorPID==0){
-
-		sprintf(buffer," mr %0.3f",Linea.kp);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		sprintf(buffer," mr %0.3f",Linea.ki);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-
-		sprintf(buffer," mr %0.3f ",Linea.kd);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		}
-		else if(datosk.selectorPID==1){
-
-		sprintf(buffer," mr %0.3f",PwmBaseML.kp);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		sprintf(buffer," mr %0.3f",PwmBaseML.ki);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-
-		sprintf(buffer," mr %0.3f ",PwmBaseML.kd);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		}
-		else if(datosk.selectorPID==2){
-
-		sprintf(buffer," mr %0.3f",PwmBaseMR.kp);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		sprintf(buffer," mr %0.3f",PwmBaseMR.ki);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-
-		sprintf(buffer," mr %0.3f ",PwmBaseMR.kd);
-		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), 1);
-		}*/
-
+		MPU6500_Read(&MPU6500_Datos);
+		MPU6500_Values_float=MPU6500_Converter(&MPU6500_Datos);
 
 		//DEBUG_RegletaSensores(UltimaPosicion);
-		//DEBUG_IMU_Conv(MPU6500_Values_float.MPU6500_floatAX,MPU6500_Values_float.MPU6500_floatAY,MPU6500_Values_float.MPU6500_floatAZ,MPU6500_Values_float.MPU6500_floatGX,MPU6500_Values_float.MPU6500_floatGY,MPU6500_Values_float.MPU6500_floatGZ);
+		DEBUG_IMU_Conv(MPU6500_Values_float.MPU6500_floatAX,MPU6500_Values_float.MPU6500_floatAY,MPU6500_Values_float.MPU6500_floatAZ,MPU6500_Values_float.MPU6500_floatGX,MPU6500_Values_float.MPU6500_floatGY,MPU6500_Values_float.MPU6500_floatGZ);
+		//DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
+
 		//DEBUG_ADC_Value(ADC_Valores_Volt[0], ADC_Valores_Volt[1], ADC_Valores_Volt[2], ADC_Valores_Volt[3]);
 		//DEBUG_ADC_RAW(ADC_DMA[0], ADC_DMA[1], ADC_DMA[2], ADC_DMA[3]);
 
@@ -709,10 +682,10 @@ void funcion_PID(void)
   				if(PIDTotalMR<20)PIDTotalMR=20;
   				if(PIDTotalMR<20)PIDTotalMR=20;
 
-  				MotorSeguidor.pwmRA=(uint16_t)(PIDTotalMR);
-  				MotorSeguidor.pwmLA=(uint16_t)(PIDTotalML);
+  				Motor.pwmRA=(uint16_t)(PIDTotalMR);
+  				Motor.pwmLA=(uint16_t)(PIDTotalML);
 
-  				funcion_motores(&MotorSeguidor);
+  				funcion_motores(&Motor);
 
   				HAL_ADC_Start_IT(&hadc1);	// iniciamos conversion ADC por DMA
   				Timer_PID1=false;		// Siempre limpiar bandera si no nunca entre o entrara siempre
@@ -748,12 +721,12 @@ void funcion_PID(void)
 
 
   				if(ADC_Valores_Volt[2]<Volt_Proteccion_Batt ){
-  					MotorSeguidor.enable_PWM=false;
+  					Motor.enable_PWM=false;
   					HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
   				}
 
   			MPU6500_Read(&MPU6500_Datos);
-  			MPU6500_Values_float=MPU6500_Converter(&MPU6500_Datos, DPS1000_CONV, G4_CONV);
+  			MPU6500_Values_float=MPU6500_Converter(&MPU6500_Datos);
   			Timer_PID2=false;		// Siempre limpiar bandera si no nunca entre o entrara siempre
   		  }
   }

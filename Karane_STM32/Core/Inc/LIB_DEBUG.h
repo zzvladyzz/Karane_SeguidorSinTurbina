@@ -18,6 +18,7 @@
 	void DEBUG_Encoders(int32_t encL, int32_t encR,float longitud);
 	void DEBUG_Odometria(float angulo,float x,float y);
 	void DEBUG_IMU_Conv(float ax,float ay,float az,float gx,float gy,float gz);
+	void DEBUG_IMU_Raw(int16_t ax,int16_t ay,int16_t az,int16_t gx,int16_t gy,int16_t gz );
 	void DEBUG_PID1();
 	void DEBUG_PID2();
 	void DEBUG_Menu();
@@ -30,6 +31,7 @@
 	#define DEBUG_Encoders(a,b,c)
 	#define DEBUG_Odometria(a,x,y)
 	#define DEBUG_IMU_Conv(a,b,c,d,e,f)
+	#define DEBUG_IMU_Raw(a,b,c,d,e,f)
 	#define DEBUG_PID1()
 	#define DEBUG_PID2()
 	#define DEBUG_Menu()

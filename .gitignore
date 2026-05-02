@@ -1,6 +1,6 @@
 Karane_STM32/Debug/
 Karane_STM32/Release/
-Karane_STM32/.settings/
+**/.settings/
 Karane_STM32/*.launch
 Karane_STM32/*.o
 Karane_STM32/*.elf
