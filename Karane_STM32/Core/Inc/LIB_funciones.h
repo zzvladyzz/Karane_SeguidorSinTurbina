@@ -31,17 +31,6 @@ typedef struct{
 	volatile int32_t ticks_L ; // Contadores de los encoders (desde el callback EXTI)
 	volatile int32_t ticks_R ;
 }odometria_init_t;
-/**
- * @brief Variables para control del motor
- */
-typedef struct
-{
-	uint16_t pwmRA;
-	uint16_t pwmRB;
-	uint16_t pwmLB;
-	uint16_t pwmLA;
-	bool  enable_PWM;
-}motores_init_t;
 
 /**
  * @brief Estructura para el PID
@@ -59,7 +48,6 @@ typedef struct
 }PID;
 
 void funcion_odometria(odometria_init_t* odometria);
-void funcion_motores(motores_init_t* motores);
 float funcion_calcularPID(PID* pid,int16_t setpoint,int16_t actual,float dt);
 float funcion_Filtro_Kalman_odometria(float delta_theta_encoders,float gyro_rate_z,float dt);
 

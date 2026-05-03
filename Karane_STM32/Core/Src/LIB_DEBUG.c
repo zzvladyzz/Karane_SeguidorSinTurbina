@@ -98,15 +98,13 @@ void DEBUG_ADC_RAW(uint16_t A0,uint16_t A1,uint16_t A2,uint16_t A3)
 	sprintf(bufferTxt," A3=%u \r\n ",A3);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 }
-void DEBUG_ADC_Value(float A0,float A1,float A2,float A3)
+void DEBUG_ADC_Value(float A0,float A1,float A2)
 {
-	sprintf(bufferTxt," A_MD=%0.2f ",A0);
+	sprintf(bufferTxt," BATT=%0.2f ",A0);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 	sprintf(bufferTxt," A_MI=%0.2f ",A1);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
-	sprintf(bufferTxt," BATT=%0.2f ",A2);
-	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
-	sprintf(bufferTxt," Selector=%0.2f \r\n ",A3);
+	sprintf(bufferTxt," A_MD=%0.2f \r\n",A2);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 }
 void DEBUG_RegletaSensores(uint16_t S0)

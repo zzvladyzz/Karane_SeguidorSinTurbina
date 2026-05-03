@@ -69,7 +69,7 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = S1_mux_Pin|S2_mux_Pin|S3_mux_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED1_Pin LED3_Pin LED2_Pin EN_MOT_Pin
@@ -81,13 +81,18 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LED4_Pin LED5_Pin BOOT1_Pin SPI_NSS_Pin
-                           S0_mux_Pin */
-  GPIO_InitStruct.Pin = LED4_Pin|LED5_Pin|BOOT1_Pin|SPI_NSS_Pin
-                          |S0_mux_Pin;
+  /*Configure GPIO pins : LED4_Pin LED5_Pin BOOT1_Pin */
+  GPIO_InitStruct.Pin = LED4_Pin|LED5_Pin|BOOT1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : SPI_NSS_Pin S0_mux_Pin */
+  GPIO_InitStruct.Pin = SPI_NSS_Pin|S0_mux_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pins : ENCA_R_Pin ENCB_R_Pin ENCB_L_Pin ENCA_L_Pin */

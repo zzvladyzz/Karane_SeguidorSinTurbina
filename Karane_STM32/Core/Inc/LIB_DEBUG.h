@@ -23,7 +23,7 @@
 	void DEBUG_PID2();
 	void DEBUG_Menu();
 	void DEBUG_ADC_RAW(uint16_t A0,uint16_t A1,uint16_t A2,uint16_t A3);
-	void DEBUG_ADC_Value(float A0,float A1,float A2,float A3);
+	void DEBUG_ADC_Value(float A0,float A1,float A2);
 	void DEBUG_RegletaSensores(uint16_t S0);
 	void DEBUG_Imprimir(char* texto);
 
@@ -37,7 +37,7 @@
 	#define DEBUG_Menu()
 	#define DEBUG_Imprimir(c)
 	#define DEBUG_ADC_RAW(a,b,c,d)
-	#define DEBUG_ADC_Value(a,b,c,d)
+	#define DEBUG_ADC_Value(a,b,c)
 	#define DEBUG_RegletaSensores(s0)
 #endif
 

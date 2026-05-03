@@ -8,9 +8,6 @@
 #include "tim.h"
 #include "gpio.h"
 #include <stdint.h>
-#define Motor htim1
-
-extern TIM_HandleTypeDef Motor;
 
 /**
  * @brief Codigo para odometria implementarlo en un timer para la ejecucion
@@ -97,37 +94,6 @@ float funcion_Filtro_Kalman_odometria(float delta_theta_encoders,float gyro_rate
 
 		return angle_estimado;
  }
-
-/**
- * @brief Control de los motores del robot
- * @param motores: se debe mandar una estructura con los datos a colocar
- */
-void funcion_motores(motores_init_t* motores)
-{
-	motores->pwmLA=(motores->pwmLA>999)?999:motores->pwmLA;
-	motores->pwmLB=(motores->pwmLB>999)?999:motores->pwmLB;
-	motores->pwmRA=(motores->pwmRA>999)?999:motores->pwmRA;
-	motores->pwmRB=(motores->pwmRB>999)?999:motores->pwmRB;
-
-	motores->pwmLA=(motores->pwmLA<0)?0:motores->pwmLA;
-	motores->pwmLB=(motores->pwmLB<0)?0:motores->pwmLB;
-	motores->pwmRA=(motores->pwmRA<0)?0:motores->pwmRA;
-	motores->pwmRB=(motores->pwmRB<0)?0:motores->pwmRB;
-
-	/* Se usara el freno activo segun hoja de datos donde el otro pin
-	 * debe ir constantemente en 100%, y el pwm debe ser complementario
-	 */
-	motores->pwmLB=999;
-	motores->pwmRB=999;
-	uint16_t pwmcLA=999-fabs(motores->pwmLA);
-	uint16_t pwmcRA=999-fabs(motores->pwmRA);
-
-	  __HAL_TIM_SetCompare(&Motor,TIM_CHANNEL_1,pwmcLA);	//izquierdo
-	  __HAL_TIM_SetCompare(&Motor,TIM_CHANNEL_2,999);
-	  __HAL_TIM_SetCompare(&Motor,TIM_CHANNEL_3,999);
-	  __HAL_TIM_SetCompare(&Motor,TIM_CHANNEL_4,pwmcRA);	//derecho
-	  HAL_GPIO_WritePin(EN_MOT_GPIO_Port, EN_MOT_Pin,motores->enable_PWM);
-}
 
 /**
  * @brief PID para los motores

@@ -35,18 +35,13 @@
 #include "LIB_DEBUG.h"
 #include "LIB_FUNCIONES.h"
 #include "LIB_MENU.h"
+#include "LIB_Motores.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef struct{
-	float valoresKLinea[3];
-	float valoresKML[3];
-	float valoresKMR[3];
-	int32_t selectorMenu;
-	int32_t selectorPID;
-}Reasignarconstantes;
+
 
 /* USER CODE END PTD */
 
@@ -56,11 +51,8 @@ typedef struct{
 #undef	DEBUG
 #define DEBUG		0
 
-#define	Delay_BTN	200		// Tiempo para verificar los ADC por DMA
-#define Delay_LED	50		// Tiempo para apagar LEDs
-#define	ADC_VREF	3.35
+#define	ADC_VREF	3.36
 #define	Volt_Proteccion_Batt 	6.0
-#define	Volt_Proteccion_current 3.2
 
 #define PWM_offset 	350
 #define	Linea_setpoint	500
@@ -79,8 +71,8 @@ typedef struct{
 #define KIMR	0.7
 #define KDMR	0.0
 
-#define umbralMenu			100
-#define umbralConstantes	10
+#define umbralMenu			150
+#define umbralGyro			1.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -95,28 +87,23 @@ typedef struct{
 /* Se inicializan todas las estructuras a usar */
 
 volatile odometria_init_t odometria={0.0,0.0,0.0,0.0,0,0};
-MPU6500_Init_Values_t 	MPU6500_Datos;
-MPU6500_Init_float_t	MPU6500_Values_float;
+MPU6500_Init_Values_t 	MPU6500_Raw;
+MPU6500_Init_float_t	MPU6500_Conv;
 MPU6500_status_e	MPU6500_Status;
-motores_init_t	Motor={0,0,0,0,false};
-const motores_init_t	MotorStop={0,0,0,0,false};
+Motores_Init	Motor;
 PID	Linea={KPLINEA,KILINEA,KDLINEA,	0,0,300,PWM_offset+200};
 PID	PwmBaseML={KPML,KIML,KDML,		0,0,300,PWM_offset+200};
 PID	PwmBaseMR={KPMR,KIMR,KDMR,		0,0,300,PWM_offset+200};
 
-Reasignarconstantes datosk={0};
 
 
 /* Variables para los ADC */
 
-uint32_t ADC_DMA[5];	//datos DMA
-volatile uint16_t ADC_buffer[4]; //datos ya obtenidos y convertidos a 16bits
+uint16_t ADC_DMA[4];	//datos DMA
 volatile uint8_t ValorBTN=0;
-float ADC_Valores_Volt[4];
 float valorAnteriorFiltro=0;
+float voltaje,A_ML,A_MR=0;
 
-
-uint16_t PWMcorregido=0;
 
 /* Variables para los encoders*/
 const int8_t estadoTabla[16]={0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0}; //valor encoders de tabla de verdad
@@ -126,56 +113,42 @@ volatile int32_t actualTickMR,anteriorMR,deltaTicksMR,PeriodoTicksMR=0;
 volatile int32_t actualTickML,anteriorML,deltaTicksML,PeriodoTicksML=0;
 
 
-/* Variables para definir tiempo de espera */
-uint32_t tiempoActual=0;
-uint32_t tiempoAnterior=0;
-uint32_t tiempoAnterior_LED=0;
 
 /*variables para Regleta de sensores*/
 
-static uint8_t PosicionesSensores[16]={7,6,5,4,3,2,1,0,8,9,10,11,12,13,14,15};
-volatile uint8_t 	MuxSel=0;
+const uint8_t PosicionesSensores[16]={7,6,5,4,3,2,1,0,8,9,10,11,12,13,14,15};
+
 volatile uint16_t 	RegletaSensores[16]={0};
-volatile int UltimaPosicion	=500;				// var donde se almacenara la posicion en la linea
+int16_t UltimaPosicion	=Linea_setpoint;	// var donde se almacenara la posicion en la linea
 volatile unsigned long sumaPonderada = 0;
 volatile unsigned long sumaLecturas = 0;
-volatile long valor=0;
 volatile unsigned long peso=0;
-
-float fR=PWM_offset;
-float fL=PWM_offset;
-float PID_linea=0;
 
 /*Timers para funciones*/
 volatile bool		enableProg=false;
-volatile bool		Timer_PID1=false;
-volatile bool		Timer_PID2=false;
 volatile bool		Timer_DEBUG=false;
-volatile uint16_t	ContadorTimDMA_PID1=0;
-volatile uint16_t	ContadorTimPID2=0;
-volatile uint16_t	ContadorTimerDEBUG=0;
+volatile bool		flagTimer20ms=false;
+volatile bool 		flagTimerPID_3ms=false;
 
 /* Variables para el menu */
 bool 	validarPulso=false;
 uint8_t valorMenu=0;
 bool	validarInicio=false;
 
-/*variables a borrar*/
-int32_t a=0;
-int32_t b=0;
-float c=0;
-float d=0;
+
+
+
+float anguloGyro=0;
+int32_t tickI=0;
+int32_t tickD=0;
+
 /////////////////////
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void funcion_PID(void);
-void funcion_DEBUG(void);
-void funcion_InicializarMotores(void);
-void funcion_ReasignarConstantesK(void);
-
+void InicializarSistema();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -220,38 +193,7 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(2000);
-  Menu_aviso(Aviso_ok);
-
-  MPU6500_Status=MPU6500_Init(&MPU6500_Datos,50,DPS250,G2);
-  if (MPU6500_Status==MPU6500_fail) {
-  	for (;;) {
-  		DEBUG_Imprimir("Fallo al iniciar MPU\r\n");
-  		Menu_aviso(Aviso_fallo);
-  		}
-  }
-  DEBUG_Imprimir("Exito al iniciar MPU\r\n");
-
-
-  DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
-
-  HAL_Delay(3000);
-  Menu_aviso(Apagar_LED);
- HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
- HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
- HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
- HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
- Motor=MotorStop;
- __HAL_TIM_MOE_ENABLE(&htim1);
-
- //HAL_ADC_Start_DMA(&hadc1, &ADC_DMA[0], 4);
- //HAL_ADC_Start_IT(&hadc1);
- HAL_TIM_Base_Start_IT(&htim3);
-
- //inhabilitamos motores
- Motor.enable_PWM=false;
- enableProg=false;
-
+  InicializarSistema();
 
   /* USER CODE END 2 */
 
@@ -273,57 +215,122 @@ int main(void)
 			Menu_ubicacion(valorMenu);
 		}
 	}
-
 	else{
 		validarPulso=false;
 	}
 
-	funcion_DEBUG();
+	/*Aca calcularemos los datos que no necesitan ser procesados a alta velocidad*/
+
+	if(flagTimer20ms)
+	{
+		/*obtenemos el voltaje*/
+		int16_t ConvFloat=(int16_t)ADC_DMA[2];
+		voltaje=(float)ConvFloat*(ADC_VREF/4095.0f);
+		voltaje*=3.2641f;
+
+		/*
+		 * Para la corriente se usa Vref=(I*G*Rshunt)+Vref
+		 * quedando con R=0.05 Vref=3.3v/2   G=20
+		 * I=Vref-1.65v
+		 * */
+		ConvFloat=(int16_t)(ADC_DMA[1]-2048);
+		A_ML=(float)ConvFloat*(ADC_VREF/4095.0f);
+
+		ConvFloat=(int16_t)(ADC_DMA[0]-2048);
+		A_MR=(float)ConvFloat*(ADC_VREF/4095.0f);
+		A_MR*=(-1);
+
+		if(ADC_DMA[3]>3600 && ADC_DMA[3]<4096)
+		{
+			ValorBTN=BTN_DERECHA;
+		}
+		else if(ADC_DMA[3]>1800 && ADC_DMA[3]<2350)
+		{
+			ValorBTN=BTN_IZQUIERDA;
+		}
+		else if(ADC_DMA[3]>2400 && ADC_DMA[3]<3000)
+		{
+			ValorBTN=BTN_ACEPTAR;
+		}
+		else{
+			ValorBTN=0;
+		}
 
 
-				  /* Aca se ejecutara el codigo si se dio aceptar y dependiendo el menu donde este*/
-				if(Menu_Ejecucion())
-				  {
-					  switch (valorMenu) {
-					  case Menu_Inicial:
-						  break;
-					  case Opcion_Calibracion_Sensores:
-						  break;
-					  case Opcion_Configuracion_PID_1:
-						  datosk.selectorPID=0;
-						  funcion_ReasignarConstantesK();
-						  break;
-					  case Opcion_Configuracion_PID_2:
-						  datosk.selectorPID=1;
-						  funcion_ReasignarConstantesK();
-						  break;
-					  case Opcion_Configuracion_PID_3:
-						  datosk.selectorPID=2;
-						  funcion_ReasignarConstantesK();
-						  break;
-					  case Opcion_Monitoreo:
+		/* Dependiendo donde se necesite se puede cambiar*/
+		MPU6500_Read(&MPU6500_Raw);
+		MPU6500_Conv=MPU6500_Converter(&MPU6500_Raw);
+		if(MPU6500_Conv.MPU6500_floatGX<umbralGyro && MPU6500_Conv.MPU6500_floatGX>-umbralGyro)
+		{
+			MPU6500_Conv.MPU6500_floatGX=0.0f;
+		}
+		if(MPU6500_Conv.MPU6500_floatGY<umbralGyro && MPU6500_Conv.MPU6500_floatGY>-umbralGyro)
+		{
+			MPU6500_Conv.MPU6500_floatGY=0.0f;
+		}
+		if(MPU6500_Conv.MPU6500_floatGZ<umbralGyro && MPU6500_Conv.MPU6500_floatGZ>-umbralGyro)
+		{
+			MPU6500_Conv.MPU6500_floatGZ=0.0f;
+		}
+		anguloGyro+=(MPU6500_Conv.MPU6500_floatGZ*0.02f);
+		/***********************************************************/
 
-						  break;
-					  case Opcion_Iniciar_CodigoA:
-						  if(!validarInicio)
-						  {
-							  HAL_Delay(5000);
+		tickD=odometria.ticks_R;
+		tickI=odometria.ticks_L;
+		odometria.ticks_R=0;
+		odometria.ticks_L=0;
 
-							  funcion_InicializarMotores();
-							  validarInicio=true;
-						  }
-						  funcion_PID();
-						  break;
-					  default:
-								break;
-										  }
-				  }
-				else{
-					validarInicio=false;
-					enableProg=false;
-					Motor=MotorStop;
-					funcion_motores(&Motor);
-				}
+		flagTimer20ms=false;
+	}
+
+
+	if(Timer_DEBUG)
+	{
+
+		//char buffer[30];
+		//sprintf(buffer,"pwm=%d ,",10);
+		//HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
+		//DEBUG_RegletaSensores(UltimaPosicion);
+		//DEBUG_IMU_Conv(MPU6500_Conv.MPU6500_floatAX,MPU6500_Conv.MPU6500_floatAY,MPU6500_Conv.MPU6500_floatAZ,MPU6500_Conv.MPU6500_floatGX,MPU6500_Conv.MPU6500_floatGY,MPU6500_Conv.MPU6500_floatGZ);
+		//DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
+
+		//DEBUG_ADC_Value(voltaje, A_ML, A_MR);
+		//DEBUG_ADC_RAW(ADC_DMA[0], ADC_DMA[1], ADC_DMA[2], ADC_DMA[3]);
+
+
+		//DEBUG_Encoders(odometria.ticks_L, odometria.ticks_R, 0);
+		//DEBUG_Encoders(tickI,tickD, 0);
+		Timer_DEBUG=false;
+	}
+
+	/* Aca se ejecutara el codigo si se dio aceptar y dependiendo el menu donde este*/
+	if(Menu_Ejecucion())
+	{
+		switch (valorMenu) {
+		case Opcion_Calibracion_Sensores:
+			break;
+		case Opcion_Iniciar_CodigoA:
+			if(!validarInicio)
+			{
+				HAL_Delay(5000);
+				validarInicio=true;
+				enableProg=true;
+			}
+			break;
+		}
+	}
+	else{
+		validarInicio=false;
+		enableProg=false;
+	}
+
+	/* Aca se ejecutara codigo PID a 3ms*/
+	if (flagTimerPID_3ms) {
+		//funcion_calcularPID(&Linea, Linea_setpoint, UltimaPosicion, 0.003f);
+
+		flagTimerPID_3ms=false;
+	}
+
 
   }
   /* USER CODE END 3 */
@@ -376,67 +383,31 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+void InicializarSistema()
 {
-	if(hadc->Instance==ADC1)
-	{
-		ADC_buffer[0]=(uint16_t)ADC_DMA[0];
-		ADC_buffer[1]=(uint16_t)ADC_DMA[1];
-		ADC_buffer[2]=(uint16_t)ADC_DMA[2];
-		ADC_buffer[3]=(uint16_t)ADC_DMA[3];
+	HAL_Delay(2000);
+	  Menu_aviso(Aviso_ok);
 
-		/*filtramos el boton pulsado en un rango*/
-		if(ADC_buffer[3]>3600 && ADC_buffer[3]<4096)
-		{
-			ValorBTN=BTN_DERECHA;
-		}
-		else if(ADC_buffer[3]>1800 && ADC_buffer[3]<2350)
-				{
-					ValorBTN=BTN_IZQUIERDA;
-				}
-		else if(ADC_buffer[3]>2400 && ADC_buffer[3]<3000)
-				{
-					ValorBTN=BTN_ACEPTAR;
-				}
-		else{
-			ValorBTN=0;
-		}
-	}
+	  MPU6500_Status=MPU6500_Init(&MPU6500_Raw,50,DPS250,G2);
+	  if (MPU6500_Status==MPU6500_fail) {
+	  	for (;;) {
+	  		DEBUG_Imprimir("Fallo al iniciar MPU\r\n");
+	  		Menu_aviso(Aviso_fallo);
+	  		}
+	  }
+	  DEBUG_Imprimir("Exito al iniciar MPU\r\n");
 
-	if(hadc->Instance==ADC2)
-	{
-		RegletaSensores[MuxSel] =(uint16_t) HAL_ADC_GetValue(hadc); // Lee el resultado
+	  HAL_Delay(3000);
+	  Menu_aviso(Apagar_LED);
+	  Inicializar_Motores(&Motor);
+	 __HAL_TIM_MOE_ENABLE(&htim1);
 
-		if(MuxSel<16)
-			{
-			valor = RegletaSensores[MuxSel];
-			// Se realizara una media ponderada normalizada entre 0-1000 donde 0 es iquierda y 1000 derecha
-			// Umbral de ruido: 10% del valor máximo (4095 * 0.1 = 409)
-			if (valor > 409) {
-				// Peso del sensor (de 0 a 1000)
-				peso = (MuxSel * 1000L) / (NumSensores - 1);
-				sumaPonderada += peso * valor;
-				sumaLecturas += valor;
-				}
-			MuxSel++;
-			}
-		else{
-					if(sumaLecturas>0){
-						UltimaPosicion = (int)(sumaPonderada / sumaLecturas);
-					}
 
-						MuxSel=0;
-						sumaLecturas=0;
-						sumaPonderada=0;
-						peso=0;
-						valor=0;
-			}
-		HAL_GPIO_WritePin(S0_mux_GPIO_Port, S0_mux_Pin, (PosicionesSensores[MuxSel]&1));
-		HAL_GPIO_WritePin(S1_mux_GPIO_Port, S1_mux_Pin, (PosicionesSensores[MuxSel]&2)>>1);
-		HAL_GPIO_WritePin(S2_mux_GPIO_Port, S2_mux_Pin, (PosicionesSensores[MuxSel]&4)>>2);
-		HAL_GPIO_WritePin(S3_mux_GPIO_Port, S3_mux_Pin, (PosicionesSensores[MuxSel]&8)>>3);
-		//HAL_ADC_Start_IT(hadc);
-	}
+	 HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC_DMA, 4);
+	 //HAL_ADC_Start(&hadc2);
+	 HAL_TIM_Base_Start_IT(&htim3);
+
+	 enableProg=false;
 
 }
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
@@ -466,270 +437,93 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	    *	Iniciamos conversion del adc
 	    *	(se podria mejorar probando tiempo mas cortos)
 	    */
-	   ContadorTimerDEBUG++;
-	   if(ContadorTimerDEBUG>4000)
+	  // static uint16_t	ContadorTimDMA_PID1=0;
+	  /// static uint16_t	ContadorTimPID2=0;
+	   static uint16_t	ContadorTimerDEBUG=0;
+	   static uint16_t	ContadorTimerPID3ms=0;
+
+	   static uint16_t	ContadorTimer20ms=0;
+	   static uint8_t 	MuxSel=0;
+
+	   if(ContadorTimerDEBUG++>8000)
 		{
-		    if(!enableProg)HAL_ADC_Start_IT(&hadc1);
-			Timer_DEBUG=true;
-			ContadorTimerDEBUG=0;
+		   Timer_DEBUG=true;
+		   ContadorTimerDEBUG=0;
 		}
-	   if(enableProg)
-	   {
-	   HAL_ADC_Start_IT(&hadc2);
+	   if(ContadorTimerPID3ms++>60)
+	   		{
+		   	   flagTimerPID_3ms=true;
+	   		   ContadorTimerPID3ms=0;
+	   		}
+	   if (ContadorTimer20ms++>400) {
+		   // 1. Asegurar que el bit DMA esté activo
+		   ADC1->CR2 |= ADC_CR2_DMA;
+		   // 2. Configurar el disparador para SWSTART (esto es lo que le falta a tu código)
+		   // EXTTRIG (bit 20) debe ser 1 y EXTSEL (bits 19:17) debe ser 111 (7 decimal)
+		   ADC1->CR2 |= (0x7 << 17) | ADC_CR2_EXTTRIG;
+		   // 3. Iniciar la conversión
+		   ADC1->CR2 |= ADC_CR2_SWSTART;
 
-	   ContadorTimDMA_PID1++;
-	   ContadorTimPID2++;
-
-        if(ContadorTimDMA_PID1>20)
-        {
-        	actualTickML=odometria.ticks_L;
-			actualTickMR=odometria.ticks_R;
-
-			deltaTicksML=actualTickML-anteriorML;
-			deltaTicksMR=actualTickMR-anteriorMR;
-
-			anteriorML=actualTickML;
-			anteriorMR=actualTickMR;
-
-			PeriodoTicksML+=deltaTicksML;
-			PeriodoTicksMR+=deltaTicksMR;
-
-        	Timer_PID1=true;
-        	ContadorTimDMA_PID1=0;
-        }
-        if(ContadorTimPID2>400)
-        {
-        	Timer_PID2=true;
-        	ContadorTimPID2=0;
-        }
-
+		   flagTimer20ms=true;
+		   ContadorTimer20ms=0;
 	   }
 
-    }
-}
+	   if(MuxSel<16)
+	   {
+		   ADC2->CR2 |= ADC_CR2_ADON;
+		   ADC2->CR2 &= ~ADC_CR2_DMA;
 
-void funcion_InicializarMotores(void)
-{
-	 /*esto deberia ir en una funciona para cuando se inicie dar un escalonado*/
-	Motor.enable_PWM=true;
-	for(uint16_t var=0;var<PWM_offset;var+=20)
-	 	{
-		 Motor.pwmLA=(uint16_t)var;
-		 Motor.pwmRA=(uint16_t)var;
-		 funcion_motores(&Motor);
-		 HAL_Delay(5);
-	 	}
-	 odometria.ticks_L=0;
-	 odometria.ticks_R=0;
-	 UltimaPosicion=500;
-	 actualTickMR,anteriorMR,deltaTicksMR,PeriodoTicksMR=0;
-	 actualTickML,anteriorML,deltaTicksML,PeriodoTicksML=0;
-	 fR=PWM_offset;
-	 fL=PWM_offset;
-	 PID_linea=0;
+		   // 2. Configurar el trigger a Software (SWSTART = 0x7 en EXTSEL)
+		   // Esto es vital: si EXTSEL no es 7, SWSTART no hace nada.
+		   ADC2->CR2 |= (0x7 << 17) | ADC_CR2_EXTTRIG;
 
-	 enableProg=true;
-}
+		   // 3. Disparar
+		   ADC2->CR2 |= ADC_CR2_SWSTART;
 
-void funcion_ReasignarConstantesK(void){
-	if(!validarInicio)
-				  {
-					  validarInicio=true;
-					  odometria.ticks_L=0;
-					  odometria.ticks_R=0;
-					  datosk.selectorMenu=0;
-				  }
+		   while (!(ADC2->SR & ADC_SR_EOC));
+
+		   RegletaSensores[MuxSel] = (uint16_t)ADC2->DR;
+		   //if(RegletaSensores[MuxSel]>RegletaMax[MuxSel]){RegletaMax[MuxSel]=RegletaSensores[MuxSel];}
+		   //if(RegletaSensores[MuxSel]<RegletaMin[MuxSel]){RegletaMin[MuxSel]=RegletaSensores[MuxSel];}
+
+		   // Se realizara una media ponderada normalizada entre 0-1000 donde 0 es iquierda y 1000 derecha
+		   // Umbral de ruido: 10% del valor máximo (4095 * 0.1 = 409)
+		   if (RegletaSensores[MuxSel] > 600) {
+			   // Peso del sensor (de 0 a 1000)
+			   peso = (MuxSel * 1000L) / (NumSensores - 1);
+			   sumaPonderada += peso * RegletaSensores[MuxSel];
+			   sumaLecturas += RegletaSensores[MuxSel];
+		   }
+
+		   MuxSel++;
+	   }
+	   else{
+		   if(sumaLecturas>0)
+		   {
+			   UltimaPosicion = (int16_t)(sumaPonderada / sumaLecturas);
+		   }
+		   MuxSel=0;
+		   sumaLecturas=0;
+		   sumaPonderada=0;
+		   peso=0;
+	   }
+	   uint8_t sel = PosicionesSensores[MuxSel];
+
+	   S0_mux_GPIO_Port->BSRR = (sel & 0x01) ? S0_mux_Pin : (S0_mux_Pin << 16);
+	   S1_mux_GPIO_Port->BSRR = (sel & 0x02) ? S1_mux_Pin : (S1_mux_Pin << 16);
+	   S2_mux_GPIO_Port->BSRR = (sel & 0x04) ? S2_mux_Pin : (S2_mux_Pin << 16);
+	   S3_mux_GPIO_Port->BSRR = (sel & 0x08) ? S3_mux_Pin : (S3_mux_Pin << 16);
+
+	   for (int var = 0; var < 20; ++var) {
+		   __NOP();
+	   }
 
 
-				  if (odometria.ticks_L>umbralMenu) {
-					  datosk.selectorMenu++;
-					  odometria.ticks_L=0;
-					  if(datosk.selectorMenu>2)datosk.selectorMenu=0;
-
-					  HAL_GPIO_WritePin(LED6_GPIO_Port, LED6_Pin, !(datosk.selectorMenu&1));
-					  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, !((datosk.selectorMenu&2)>>1));
-
-				  }
-				  if (odometria.ticks_L<-umbralMenu) {
-					  datosk.selectorMenu--;
-					  odometria.ticks_L=0;
-					  if(datosk.selectorMenu<0)datosk.selectorMenu=2;
-					  HAL_GPIO_WritePin(LED6_GPIO_Port, LED6_Pin, !(datosk.selectorMenu&1));
-					  HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, !((datosk.selectorMenu&2)>>1));
-
-				  }
-
-				  if (odometria.ticks_R>umbralConstantes) {
-					  if(datosk.selectorPID==0){
-						  datosk.valoresKLinea[datosk.selectorMenu]++;
-					  }
-					  else if(datosk.selectorPID==1){
-
-						  datosk.valoresKML[datosk.selectorMenu]++;
-					  }
-					  else if(datosk.selectorPID==2){
-
-						  datosk.valoresKMR[datosk.selectorMenu]++;
-					  }
-
-					  odometria.ticks_R=0;
-					  HAL_GPIO_TogglePin(LED6_GPIO_Port, LED6_Pin);
-				  }
-
-				  if (odometria.ticks_R<-umbralConstantes) {
-					  if(datosk.selectorPID==0){
-						  datosk.valoresKLinea[datosk.selectorMenu]--;
-					  }
-					  else if(datosk.selectorPID==1){
-						  datosk.valoresKML[datosk.selectorMenu]--;
-					  }
-					  else if(datosk.selectorPID==2){
-						  datosk.valoresKMR[datosk.selectorMenu]--;
-					  }
-					  odometria.ticks_R=0;
-					  HAL_GPIO_TogglePin(LED6_GPIO_Port, LED6_Pin);
-				  }
-				  /*
-				   * Aca se  modifica el pid para cada menu
-				   * y se tiene un if para evitar que sea negativo con un ++ a una variable
-				   * anterior para evitar que siga restando
-				   */
-
-				  Linea.kp=KPLINEA+(datosk.valoresKLinea[0]*0.1);
-				  if(Linea.kp<0)Linea.kp=0,datosk.valoresKLinea[0]++;
-				  Linea.ki=KILINEA+(datosk.valoresKLinea[1]*0.001);
-				  if(Linea.ki<0)Linea.ki=0,datosk.valoresKLinea[1]++;
-				  Linea.kd=KDLINEA+(datosk.valoresKLinea[2]*0.001);
-				  if(Linea.kd<0)Linea.kd=0,datosk.valoresKLinea[2]++;
-				  PwmBaseML.kp=KPML+(datosk.valoresKML[0]*0.1);
-				  if(PwmBaseML.kp<0)PwmBaseML.kp=0,datosk.valoresKML[0]++;
-				  PwmBaseML.ki=KIML+(datosk.valoresKML[1]*0.001);
-				  if(PwmBaseML.ki<0)PwmBaseML.ki=0,datosk.valoresKML[1]++;
-				  PwmBaseML.kd=KDML+(datosk.valoresKML[2]*0.001);
-				  if(PwmBaseML.kd<0)PwmBaseML.kd=0,datosk.valoresKML[2]++;
-				  PwmBaseMR.kp=KPMR+(datosk.valoresKMR[0]*0.1);
-				  if(PwmBaseMR.kp<0)PwmBaseMR.kp=0,datosk.valoresKMR[0]++;
-				  PwmBaseMR.ki=KIMR+(datosk.valoresKMR[1]*0.001);
-				  if(PwmBaseMR.ki<0)PwmBaseMR.ki=0,datosk.valoresKMR[1]++;
-				  PwmBaseMR.kd=KDMR+(datosk.valoresKMR[2]*0.001);
-				  if(PwmBaseMR.kd<0)PwmBaseMR.kd=0,datosk.valoresKMR[2]++;
+   }
 }
 
 
-void funcion_DEBUG(void)
-{
-	if(Timer_DEBUG)
-		  			  {
-		MPU6500_Read(&MPU6500_Datos);
-		MPU6500_Values_float=MPU6500_Converter(&MPU6500_Datos);
 
-		//DEBUG_RegletaSensores(UltimaPosicion);
-		DEBUG_IMU_Conv(MPU6500_Values_float.MPU6500_floatAX,MPU6500_Values_float.MPU6500_floatAY,MPU6500_Values_float.MPU6500_floatAZ,MPU6500_Values_float.MPU6500_floatGX,MPU6500_Values_float.MPU6500_floatGY,MPU6500_Values_float.MPU6500_floatGZ);
-		//DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
-
-		//DEBUG_ADC_Value(ADC_Valores_Volt[0], ADC_Valores_Volt[1], ADC_Valores_Volt[2], ADC_Valores_Volt[3]);
-		//DEBUG_ADC_RAW(ADC_DMA[0], ADC_DMA[1], ADC_DMA[2], ADC_DMA[3]);
-
-
-		//DEBUG_Encoders(odometria.ticks_L, odometria.ticks_R, 0);
-
-
-		Timer_DEBUG=false;
-	}
-}
-
-void funcion_PID(void)
-  {
-
-  		  /*
-  		   * Aca se realizar el primer PID cada 1ms para los motores
-  		   * como tambien la lectura de DMA como su inicializacion
-  		   * debe funcionar cuando se pulse y habilitar la var enableProg
-  		   */
-
-  		  if (Timer_PID1) {
-  				/*obtenemos el voltaje*/
-  				ADC_Valores_Volt[0]=(ADC_VREF*ADC_buffer[0])/4095;
-  				ADC_Valores_Volt[1]=(ADC_VREF*ADC_buffer[1])/4095;
-  				ADC_Valores_Volt[2]=(ADC_VREF*ADC_buffer[2])/4095;
-  				ADC_Valores_Volt[2]=ADC_Valores_Volt[2]*3.2;
-  				ADC_Valores_Volt[3]=(ADC_VREF*ADC_buffer[3])/4095;
-
-  				/*
-  				 * Antes del pid se revisa los sistemas de bloqueo por bateria baja o
-  				 * motores por sobrecarga
-  				 */
-  				/*if(ADC_Valores_Volt[0]>Volt_Proteccion_current && PeriodoTicksMR<5){
-  					HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
-  					MotorSeguidor.enable_PWM=false;
-  				}
-  				if(ADC_Valores_Volt[1]>Volt_Proteccion_current && PeriodoTicksML<5){
-  					HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
-  					MotorSeguidor.enable_PWM=false;
-  				}*/
-
-
-  				/* PID sumamos a MR y restamos a MI*/
-  				PID_linea=funcion_calcularPID(&Linea, Linea_setpoint, UltimaPosicion, 0.002f);
-
-  				float PIDTotalMR=PWMcorregido+fR+PID_linea;
-  				float PIDTotalML=PWMcorregido+fL-PID_linea;
-  				c=PIDTotalML;
-  				d=PIDTotalMR;
-  				if(PIDTotalMR>(950))PIDTotalMR=950;
-  				if(PIDTotalML>(950))PIDTotalML=950;
-
-  				if(PIDTotalMR<20)PIDTotalMR=20;
-  				if(PIDTotalMR<20)PIDTotalMR=20;
-
-  				Motor.pwmRA=(uint16_t)(PIDTotalMR);
-  				Motor.pwmLA=(uint16_t)(PIDTotalML);
-
-  				funcion_motores(&Motor);
-
-  				HAL_ADC_Start_IT(&hadc1);	// iniciamos conversion ADC por DMA
-  				Timer_PID1=false;		// Siempre limpiar bandera si no nunca entre o entrara siempre
-  			}
-  		  /*
-  		   * Aca se realiza el PID2 a 20 ms para los encoders debido a su tiempo de retardo
-  		   * y solo si la var enableProg esta habilitado
-  		   */
-  		  if(Timer_PID2)
-  		  {
-  			  	fL=funcion_calcularPID(&PwmBaseML, Encoder_setpoint, PeriodoTicksML, 0.02f);
-  			  	fR=funcion_calcularPID(&PwmBaseMR, Encoder_setpoint, PeriodoTicksMR, 0.02f);
-  			  	a=PeriodoTicksMR;
-  			  	b=PeriodoTicksML;
-
-  				PeriodoTicksML=0;
-  			  	PeriodoTicksMR=0;
-
-  			  	/*
-  			  	 * Factor de correcion para offset PWM
-  			  	 * PWMcorregido=PWMoffset*(Voltnominal/VolAactual)
-  			  	 * y filtro ema
-  			  	 * valorFiltrado=(alpha*valorActual)+(1-alpha)*valorAnterior
-  			  	 *
-  			  	 */
-  			  	float alpha=0.01;
-  			  	float valorFiltrado=(alpha*ADC_Valores_Volt[2])+((1-alpha)*valorAnteriorFiltro);
-  			  	valorAnteriorFiltro=ADC_Valores_Volt[2];
-
-  			  	PWMcorregido=(uint16_t)((PWM_offset*8.4)/valorFiltrado);
-  			  	if(PWMcorregido>500)PWMcorregido=500;
-  			  	if(PWMcorregido<10)PWMcorregido=10;
-
-
-  				if(ADC_Valores_Volt[2]<Volt_Proteccion_Batt ){
-  					Motor.enable_PWM=false;
-  					HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
-  				}
-
-  			MPU6500_Read(&MPU6500_Datos);
-  			MPU6500_Values_float=MPU6500_Converter(&MPU6500_Datos);
-  			Timer_PID2=false;		// Siempre limpiar bandera si no nunca entre o entrara siempre
-  		  }
-  }
 
 /* USER CODE END 4 */
 
