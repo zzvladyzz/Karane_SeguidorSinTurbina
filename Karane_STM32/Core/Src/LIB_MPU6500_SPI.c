@@ -234,7 +234,7 @@ MPU6500_status_e	MPU6500_Init(MPU6500_Init_Values_t * offset,uint16_t N,uint16_t
 
 
 	// compensar con el valor de 2048 por que es 1g
-	offset->MPU6500_ACCELZ.MPU6500_int16=offset->MPU6500_ACCELZ.MPU6500_int16-2048;
+	offset->MPU6500_ACCELZ.MPU6500_int16=offset->MPU6500_ACCELZ.MPU6500_int16-2048-170;
 	hr=MPU6500_Read_Reg(OFFSET_H_AZ);
 	lr=MPU6500_Read_Reg(OFFSET_L_AZ);
 	valor=(int16_t)((hr<<8)|lr);
@@ -267,22 +267,6 @@ MPU6500_status_e	MPU6500_Init(MPU6500_Init_Values_t * offset,uint16_t N,uint16_t
 	MPU6500_Write_Reg(CONFIG_ACCEL, g);
 	MPU6500_Write_Reg(CONFIG_GYRO, dps);
 
-
-/*		Se usa solo para ver los registros en offset
-		offset->MPU6500_GYROX.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_GX);
-		offset->MPU6500_GYROX.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_GX);
-		offset->MPU6500_GYROY.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_GY);
-		offset->MPU6500_GYROY.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_GY);
-		offset->MPU6500_GYROZ.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_GZ);
-		offset->MPU6500_GYROZ.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_GZ);
-
-		offset->MPU6500_ACCELX.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_AX);
-		offset->MPU6500_ACCELX.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_AX);
-		offset->MPU6500_ACCELY.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_AY);
-		offset->MPU6500_ACCELY.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_AY);
-		offset->MPU6500_ACCELZ.MPU6500_uint8[1]=MPU6500_Read_Reg(OFFSET_H_AZ);
-		offset->MPU6500_ACCELZ.MPU6500_uint8[0]=MPU6500_Read_Reg(OFFSET_L_AZ);
-*/
 	return MPU6500_ok;
 
 }

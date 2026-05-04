@@ -56,19 +56,25 @@
 
 #define PWM_offset 	350
 #define	Linea_setpoint	500
-#define Encoder_setpoint 25
+#define tickMax 20
+#define tickMin 2
+
 #define NumSensores 16
 
-#define	KPLINEA 1.5
-#define	KILINEA 0.001
-#define	KDLINEA 0.01
+#define	KPLINEA 0.6
+#define	KILINEA 0.00
+#define	KDLINEA 0.0
 
-#define KPML	2.0
-#define KIML	0.5
+#define	KPGYRO 2.3
+#define	KIGYRO 0.00
+#define	KDGYRO 0.00
+
+#define KPML	1.2
+#define KIML	2
 #define KDML	0.0
 
-#define KPMR	2.0
-#define KIMR	0.7
+#define KPMR	1.2
+#define KIMR	2
 #define KDMR	0.0
 
 #define umbralMenu			150
@@ -91,9 +97,10 @@ MPU6500_Init_Values_t 	MPU6500_Raw;
 MPU6500_Init_float_t	MPU6500_Conv;
 MPU6500_status_e	MPU6500_Status;
 Motores_Init	Motor;
-PID	Linea={KPLINEA,KILINEA,KDLINEA,	0,0,300,PWM_offset+200};
-PID	PwmBaseML={KPML,KIML,KDML,		0,0,300,PWM_offset+200};
-PID	PwmBaseMR={KPMR,KIMR,KDMR,		0,0,300,PWM_offset+200};
+PID	LineaGyro={KPLINEA,KILINEA,KDLINEA,	0,0,300,400};
+PID		Gyro= {KPGYRO,KIGYRO,KDGYRO,	0,0,300,400};
+PID	PwmBaseML={KPML,KIML,KDML,		0,0,400,600};
+PID	PwmBaseMR={KPMR,KIMR,KDMR,		0,0,400,600};
 
 
 
@@ -127,8 +134,10 @@ volatile unsigned long peso=0;
 /*Timers para funciones*/
 volatile bool		enableProg=false;
 volatile bool		Timer_DEBUG=false;
-volatile bool		flagTimer20ms=false;
-volatile bool 		flagTimerPID_3ms=false;
+volatile bool		flagTimer10ms=false;
+volatile bool 		flagStartPID=false;
+volatile bool 		flagTimerGyro=false;
+volatile bool 		flagStartRegleta=false;
 
 /* Variables para el menu */
 bool 	validarPulso=false;
@@ -137,11 +146,14 @@ bool	validarInicio=false;
 
 
 
-
+float GyroObjetivo=0;
+float PwmObjetivo=0;
 float anguloGyro=0;
-int32_t tickI=0;
-int32_t tickD=0;
-
+int32_t tick_L=0;
+int32_t tick_R=0;
+float PWMbase_MR=0;
+float PWMbase_ML=0;
+int16_t Encoder_setpoint=10;
 /////////////////////
 /* USER CODE END PV */
 
@@ -205,23 +217,57 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-
-	if(ValorBTN!=0)
+	if(flagTimerGyro)
 	{
-		if(!validarPulso)
+
+		/* Dependiendo donde se necesite se puede cambiar ahora esta a 1ms*/
+		MPU6500_Read(&MPU6500_Raw);
+		MPU6500_Conv=MPU6500_Converter(&MPU6500_Raw);
+		if(MPU6500_Conv.MPU6500_floatGX<umbralGyro && MPU6500_Conv.MPU6500_floatGX>-umbralGyro)
 		{
-			validarPulso=true;
-			valorMenu=Menu_Navegacion(ValorBTN);
-			Menu_ubicacion(valorMenu);
+			MPU6500_Conv.MPU6500_floatGX=0.0f;
 		}
+		if(MPU6500_Conv.MPU6500_floatGY<umbralGyro && MPU6500_Conv.MPU6500_floatGY>-umbralGyro)
+		{
+			MPU6500_Conv.MPU6500_floatGY=0.0f;
+		}
+		if(MPU6500_Conv.MPU6500_floatGZ<umbralGyro && MPU6500_Conv.MPU6500_floatGZ>-umbralGyro)
+		{
+			MPU6500_Conv.MPU6500_floatGZ=0.0f;
+		}
+		anguloGyro+=(MPU6500_Conv.MPU6500_floatGZ*0.001f);
+		/***********************************************************/
+		flagTimerGyro=false;
+		flagStartRegleta=true;
 	}
-	else{
-		validarPulso=false;
+	/*
+	 *  Aca se ejecutara el PID una vez terminado de leer el mpu y la regleta de sensores
+	 * se puede cambiar a un tiempo fijo
+	 *
+	 */
+	if (flagStartPID) {
+		/*
+		 * Primero obtenemos el PID para obtener los grados que debera girar el robot respecto
+		 * al centro de la linea no superar -400g/s y +400 g/s o se puede cambia segun necesidad
+		 *
+		 */
+		GyroObjetivo=funcion_calcularPID(&LineaGyro, 0, UltimaPosicion, 0.0015f);
+
+		/*	Con este valor recien entrar al pid que nos importa */
+
+		PwmObjetivo=funcion_calcularPID(&Gyro, GyroObjetivo, MPU6500_Conv.MPU6500_floatGZ, 0.0015f);
+
+
+		Motor.PWM_ML=(int16_t)(PWMbase_ML-PwmObjetivo);
+		Motor.PWM_MR=(int16_t)(PWMbase_MR+PwmObjetivo);
+		PWM_Motores(&Motor);
+
+		flagStartPID=false;
 	}
+
 
 	/*Aca calcularemos los datos que no necesitan ser procesados a alta velocidad*/
-
-	if(flagTimer20ms)
+	if(flagTimer10ms)
 	{
 		/*obtenemos el voltaje*/
 		int16_t ConvFloat=(int16_t)ADC_DMA[2];
@@ -240,57 +286,81 @@ int main(void)
 		A_MR=(float)ConvFloat*(ADC_VREF/4095.0f);
 		A_MR*=(-1);
 
-		if(ADC_DMA[3]>3600 && ADC_DMA[3]<4096)
+		//Lectura ADC para luego validacion en el menu
+		if (ADC_DMA[3] > 3500)      ValorBTN = BTN_DERECHA;   // Rango 3500 - 4095
+		else if (ADC_DMA[3] > 2400) ValorBTN = BTN_ACEPTAR;   // Rango 2400 - 3499
+		else if (ADC_DMA[3] > 1800) ValorBTN = BTN_IZQUIERDA; // Rango 1800 - 2399
+		else                     ValorBTN = 0;             // Reposo / Ruido
+
+		static uint8_t confirmacionPulso=0;
+		if(ValorBTN!=0)
 		{
-			ValorBTN=BTN_DERECHA;
-		}
-		else if(ADC_DMA[3]>1800 && ADC_DMA[3]<2350)
-		{
-			ValorBTN=BTN_IZQUIERDA;
-		}
-		else if(ADC_DMA[3]>2400 && ADC_DMA[3]<3000)
-		{
-			ValorBTN=BTN_ACEPTAR;
+			confirmacionPulso++;
+			if(confirmacionPulso>20)
+			{
+				if(!validarPulso)
+				{
+					validarPulso=true;
+					valorMenu=Menu_Navegacion(ValorBTN);
+					Menu_ubicacion(valorMenu);
+				}
+			}
 		}
 		else{
-			ValorBTN=0;
+			confirmacionPulso=0;
+			validarPulso=false;
 		}
 
+		/*
+		 * Codigo para segun el valor de la linea obtener un factor para reducir los tick
+		 * y tener una rampa que segun cual sea el valor sumar o restar
+		 */
+		static int16_t EscalonTick=0;
+		int16_t valorEncoder=UltimaPosicion;
+		valorEncoder=(valorEncoder<0)?valorEncoder*(-1):valorEncoder;
+		if (valorEncoder > 100) {
+		    // Si hay curva, el setpoint baja proporcionalmente
+		    float factorEncoder = (valorEncoder - 100) / 400.0f;
+		    Encoder_setpoint =(int16_t) tickMax - (factorEncoder * (tickMax - tickMin));
+		} else {
+		    Encoder_setpoint = tickMax;
+		}
 
-		/* Dependiendo donde se necesite se puede cambiar*/
-		MPU6500_Read(&MPU6500_Raw);
-		MPU6500_Conv=MPU6500_Converter(&MPU6500_Raw);
-		if(MPU6500_Conv.MPU6500_floatGX<umbralGyro && MPU6500_Conv.MPU6500_floatGX>-umbralGyro)
-		{
-			MPU6500_Conv.MPU6500_floatGX=0.0f;
-		}
-		if(MPU6500_Conv.MPU6500_floatGY<umbralGyro && MPU6500_Conv.MPU6500_floatGY>-umbralGyro)
-		{
-			MPU6500_Conv.MPU6500_floatGY=0.0f;
-		}
-		if(MPU6500_Conv.MPU6500_floatGZ<umbralGyro && MPU6500_Conv.MPU6500_floatGZ>-umbralGyro)
-		{
-			MPU6500_Conv.MPU6500_floatGZ=0.0f;
-		}
-		anguloGyro+=(MPU6500_Conv.MPU6500_floatGZ*0.02f);
-		/***********************************************************/
+		/// revisar esto para bajar los ticks cuando este en curva o quitar lo anterior y solo
+		/// usar esto ya que lo anterior no tienen mucho sentido ya que restat tick y luego
+		/// volvemos a sumarlo
+		if (EscalonTick < Encoder_setpoint) EscalonTick += 1;
+		else if (EscalonTick > Encoder_setpoint) EscalonTick -= 1;
 
-		tickD=odometria.ticks_R;
-		tickI=odometria.ticks_L;
+		/*
+		 * Teniendo el valor de ticks segun la linea donde estemos se hace el pid antes
+		 * leyendo los ticks del encoder y asi obteniendo el PWM base para cada motor
+		 * revisarlo ya que puede meter valores negativos al enconder y no es lo optimo
+		 */
+        float ajusteTicks = PwmObjetivo / 40.0f;
+
+        float setpoint_L = (float)EscalonTick - ajusteTicks;
+        float setpoint_R = (float)EscalonTick + ajusteTicks;
+
+		tick_R=odometria.ticks_R;
+		tick_L=odometria.ticks_L;
 		odometria.ticks_R=0;
 		odometria.ticks_L=0;
+		PWMbase_ML=funcion_calcularPID(&PwmBaseML,setpoint_L, (float) tick_L, 0.02);
+		PWMbase_MR=funcion_calcularPID(&PwmBaseMR, setpoint_R, (float) tick_R, 0.02);
 
-		flagTimer20ms=false;
+		flagTimer10ms=false;
 	}
 
 
 	if(Timer_DEBUG)
 	{
 
-		//char buffer[30];
-		//sprintf(buffer,"pwm=%d ,",10);
-		//HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
-		//DEBUG_RegletaSensores(UltimaPosicion);
+		char buffer[30];
+		sprintf(buffer,"angulo=%0.2f ,",anguloGyro);
+		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+		DEBUG_RegletaSensores(UltimaPosicion);
 		//DEBUG_IMU_Conv(MPU6500_Conv.MPU6500_floatAX,MPU6500_Conv.MPU6500_floatAY,MPU6500_Conv.MPU6500_floatAZ,MPU6500_Conv.MPU6500_floatGX,MPU6500_Conv.MPU6500_floatGY,MPU6500_Conv.MPU6500_floatGZ);
 		//DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
 
@@ -299,7 +369,7 @@ int main(void)
 
 
 		//DEBUG_Encoders(odometria.ticks_L, odometria.ticks_R, 0);
-		//DEBUG_Encoders(tickI,tickD, 0);
+		//DEBUG_Encoders(tick_L,tick_R, 0);
 		Timer_DEBUG=false;
 	}
 
@@ -324,12 +394,6 @@ int main(void)
 		enableProg=false;
 	}
 
-	/* Aca se ejecutara codigo PID a 3ms*/
-	if (flagTimerPID_3ms) {
-		//funcion_calcularPID(&Linea, Linea_setpoint, UltimaPosicion, 0.003f);
-
-		flagTimerPID_3ms=false;
-	}
 
 
   }
@@ -440,22 +504,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	  // static uint16_t	ContadorTimDMA_PID1=0;
 	  /// static uint16_t	ContadorTimPID2=0;
 	   static uint16_t	ContadorTimerDEBUG=0;
-	   static uint16_t	ContadorTimerPID3ms=0;
 
-	   static uint16_t	ContadorTimer20ms=0;
+	   static uint16_t	ContadorTimer10ms=0;
 	   static uint8_t 	MuxSel=0;
+	   static uint16_t ContadorTimerGyro=0;
 
 	   if(ContadorTimerDEBUG++>8000)
 		{
 		   Timer_DEBUG=true;
 		   ContadorTimerDEBUG=0;
 		}
-	   if(ContadorTimerPID3ms++>60)
-	   		{
-		   	   flagTimerPID_3ms=true;
-	   		   ContadorTimerPID3ms=0;
-	   		}
-	   if (ContadorTimer20ms++>400) {
+
+	   if (ContadorTimer10ms++>200) {
 		   // 1. Asegurar que el bit DMA esté activo
 		   ADC1->CR2 |= ADC_CR2_DMA;
 		   // 2. Configurar el disparador para SWSTART (esto es lo que le falta a tu código)
@@ -464,9 +524,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		   // 3. Iniciar la conversión
 		   ADC1->CR2 |= ADC_CR2_SWSTART;
 
-		   flagTimer20ms=true;
-		   ContadorTimer20ms=0;
+		   flagTimer10ms=true;
+		   ContadorTimer10ms=0;
 	   }
+	   if(ContadorTimerGyro++>20)
+	   {
+		   /*Timer a 1ms para el gyro*/
+		   flagTimerGyro=true;
+		   ContadorTimerGyro=0;
+	   }
+
+
+	   if(flagStartRegleta)
+	   {
+		   /* Terminado la lectura de Gyro a 1ms manda una bandera para empezar
+		    * lectura de regleta y terminado se borra la flag para esperar otra bandera
+		    * */
 
 	   if(MuxSel<16)
 	   {
@@ -500,12 +573,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	   else{
 		   if(sumaLecturas>0)
 		   {
-			   UltimaPosicion = (int16_t)(sumaPonderada / sumaLecturas);
+			   UltimaPosicion = (int16_t)(sumaPonderada / sumaLecturas)-500;
 		   }
 		   MuxSel=0;
 		   sumaLecturas=0;
 		   sumaPonderada=0;
 		   peso=0;
+		   /* Reiniciamos tiempo regleta hasta el otro pulso y empezamos el pid */
+		   flagStartRegleta=false;
+		   flagStartPID=true;
 	   }
 	   uint8_t sel = PosicionesSensores[MuxSel];
 
@@ -517,6 +593,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	   for (int var = 0; var < 20; ++var) {
 		   __NOP();
 	   }
+   }
 
 
    }

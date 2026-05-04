@@ -102,7 +102,7 @@ float funcion_Filtro_Kalman_odometria(float delta_theta_encoders,float gyro_rate
  * @param actual: valor leido por los sensores
  * @param dt: Tiempo de muestreo segun timer puede variar
  */
-float funcion_calcularPID(PID* pid,int16_t setpoint,int16_t actual,float dt)
+float funcion_calcularPID(PID* pid,float setpoint,float actual,float dt)
 {
 	float error=(float)(setpoint-actual);
 	float P=error*pid->kp;
@@ -117,7 +117,7 @@ float funcion_calcularPID(PID* pid,int16_t setpoint,int16_t actual,float dt)
 	pid->ultimoError=error;
 
 	float PIDout=P+I+D;
-	if(PIDout>(pid->PWM_Maximo))PIDout=(pid->PWM_Maximo);
-	if(PIDout<-(pid->PWM_Maximo))PIDout=-(pid->PWM_Maximo);
+	if(PIDout>(pid->PID_Maximo))PIDout=(pid->PID_Maximo);
+	if(PIDout<-(pid->PID_Maximo))PIDout=-(pid->PID_Maximo);
 	return PIDout;
 }

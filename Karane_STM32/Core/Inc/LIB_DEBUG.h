@@ -24,7 +24,7 @@
 	void DEBUG_Menu();
 	void DEBUG_ADC_RAW(uint16_t A0,uint16_t A1,uint16_t A2,uint16_t A3);
 	void DEBUG_ADC_Value(float A0,float A1,float A2);
-	void DEBUG_RegletaSensores(uint16_t S0);
+	void DEBUG_RegletaSensores(int16_t S0);
 	void DEBUG_Imprimir(char* texto);
 
 #else

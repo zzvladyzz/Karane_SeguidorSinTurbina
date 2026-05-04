@@ -43,12 +43,12 @@ typedef struct
 	float	ultimoError;
 	float	integral;
 	float	winup;
-	float	PWM_Maximo;
+	float	PID_Maximo;
 
 }PID;
 
 void funcion_odometria(odometria_init_t* odometria);
-float funcion_calcularPID(PID* pid,int16_t setpoint,int16_t actual,float dt);
+float funcion_calcularPID(PID* pid,float setpoint,float actual,float dt);
 float funcion_Filtro_Kalman_odometria(float delta_theta_encoders,float gyro_rate_z,float dt);
 
 #endif /* INC_LIB_FUNCIONES_H_ */

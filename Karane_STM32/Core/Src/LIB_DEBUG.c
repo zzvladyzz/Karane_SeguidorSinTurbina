@@ -107,9 +107,9 @@ void DEBUG_ADC_Value(float A0,float A1,float A2)
 	sprintf(bufferTxt," A_MD=%0.2f \r\n",A2);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 }
-void DEBUG_RegletaSensores(uint16_t S0)
+void DEBUG_RegletaSensores(int16_t S0)
 {
-	sprintf(bufferTxt," Posicion =%u \r\n",S0);
+	sprintf(bufferTxt," Posicion =%d \r\n",S0);
 	HAL_UART_Transmit(&UART, (uint8_t *)bufferTxt, strlen(bufferTxt), HAL_MAX_DELAY);
 }
 #endif

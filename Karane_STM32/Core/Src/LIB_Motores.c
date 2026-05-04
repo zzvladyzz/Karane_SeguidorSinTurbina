@@ -93,8 +93,6 @@ void PWM_Motores(Motores_Init * Mot)
 	HAL_GPIO_WritePin(Enable_PORT, Enable_PIN, Mot->ENABLE);
 	int16_t PWM_ML=0;
 
-
-
 	if((Mot->PWM_ML)<0)
 	{
 		Mot->PWM_ML=((Mot->PWM_ML)<-PWM_MAX)?-PWM_MAX:Mot->PWM_ML;
@@ -121,7 +119,7 @@ void PWM_Motores(Motores_Init * Mot)
 
 		PWM_MR=999+Mot->PWM_MR;
 		__HAL_TIM_SET_COMPARE(&PWM_Timer_Mot,PWM_MR_A,999);
-		__HAL_TIM_SET_COMPARE(&PWM_Timer_Mot,PWM_MR_B,PWM_ML);
+		__HAL_TIM_SET_COMPARE(&PWM_Timer_Mot,PWM_MR_B,PWM_MR);
 	}
 	else
 	{
