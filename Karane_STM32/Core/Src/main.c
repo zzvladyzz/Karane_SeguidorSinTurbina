@@ -58,6 +58,8 @@
 #define	Linea_setpoint	500
 #define tickMax 20
 #define tickMin 2
+#define GyroMax 400.0f
+
 
 #define NumSensores 16
 
@@ -97,7 +99,7 @@ MPU6500_Init_Values_t 	MPU6500_Raw;
 MPU6500_Init_float_t	MPU6500_Conv;
 MPU6500_status_e	MPU6500_Status;
 Motores_Init	Motor;
-PID	LineaGyro={KPLINEA,KILINEA,KDLINEA,	0,0,300,400};
+PID	LineaGyro={KPLINEA,KILINEA,KDLINEA,	0,0,300,GyroMax};
 PID		Gyro= {KPGYRO,KIGYRO,KDGYRO,	0,0,300,400};
 PID	PwmBaseML={KPML,KIML,KDML,		0,0,400,600};
 PID	PwmBaseMR={KPMR,KIMR,KDMR,		0,0,400,600};
@@ -153,7 +155,10 @@ int32_t tick_L=0;
 int32_t tick_R=0;
 float PWMbase_MR=0;
 float PWMbase_ML=0;
-int16_t Encoder_setpoint=10;
+
+float setpoint_L=tickMax;
+float setpoint_R=tickMax;
+int16_t EscalonTick=0;
 /////////////////////
 /* USER CODE END PV */
 
@@ -161,6 +166,7 @@ int16_t Encoder_setpoint=10;
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void InicializarSistema();
+void InicializarValores();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -245,7 +251,7 @@ int main(void)
 	 * se puede cambiar a un tiempo fijo
 	 *
 	 */
-	if (flagStartPID) {
+	if (flagStartPID ) {
 		/*
 		 * Primero obtenemos el PID para obtener los grados que debera girar el robot respecto
 		 * al centro de la linea no superar -400g/s y +400 g/s o se puede cambia segun necesidad
@@ -315,20 +321,22 @@ int main(void)
 		 * Codigo para segun el valor de la linea obtener un factor para reducir los tick
 		 * y tener una rampa que segun cual sea el valor sumar o restar
 		 */
-		static int16_t EscalonTick=0;
+
+		int16_t Encoder_setpoint=0;
 		int16_t valorEncoder=UltimaPosicion;
 		valorEncoder=(valorEncoder<0)?valorEncoder*(-1):valorEncoder;
-		if (valorEncoder > 100) {
+		if (valorEncoder > 200) {
 		    // Si hay curva, el setpoint baja proporcionalmente
-		    float factorEncoder = (valorEncoder - 100) / 400.0f;
+		    float factorEncoder = (valorEncoder - 100) / GyroMax;
 		    Encoder_setpoint =(int16_t) tickMax - (factorEncoder * (tickMax - tickMin));
 		} else {
 		    Encoder_setpoint = tickMax;
-		}
 
+		}
 		/// revisar esto para bajar los ticks cuando este en curva o quitar lo anterior y solo
 		/// usar esto ya que lo anterior no tienen mucho sentido ya que restat tick y luego
 		/// volvemos a sumarlo
+
 		if (EscalonTick < Encoder_setpoint) EscalonTick += 1;
 		else if (EscalonTick > Encoder_setpoint) EscalonTick -= 1;
 
@@ -339,15 +347,17 @@ int main(void)
 		 */
         float ajusteTicks = PwmObjetivo / 40.0f;
 
-        float setpoint_L = (float)EscalonTick - ajusteTicks;
-        float setpoint_R = (float)EscalonTick + ajusteTicks;
+        setpoint_L = (float)EscalonTick - ajusteTicks;
+        setpoint_R = (float)EscalonTick + ajusteTicks;
 
 		tick_R=odometria.ticks_R;
 		tick_L=odometria.ticks_L;
 		odometria.ticks_R=0;
 		odometria.ticks_L=0;
-		PWMbase_ML=funcion_calcularPID(&PwmBaseML,setpoint_L, (float) tick_L, 0.02);
-		PWMbase_MR=funcion_calcularPID(&PwmBaseMR, setpoint_R, (float) tick_R, 0.02);
+
+
+			PWMbase_ML=funcion_calcularPID(&PwmBaseML,setpoint_L, (float) tick_L, 0.02);
+			PWMbase_MR=funcion_calcularPID(&PwmBaseMR, setpoint_R, (float) tick_R, 0.02);
 
 		flagTimer10ms=false;
 	}
@@ -385,6 +395,8 @@ int main(void)
 				HAL_Delay(5000);
 				validarInicio=true;
 				enableProg=true;
+				Motor.ENABLE=true;
+				InicializarValores();
 			}
 			break;
 		}
@@ -392,6 +404,7 @@ int main(void)
 	else{
 		validarInicio=false;
 		enableProg=false;
+		Motor.ENABLE=false;
 	}
 
 
@@ -598,8 +611,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
    }
 }
-
-
+void InicializarValores()
+{
+	LineaGyro.ultimoError=0;
+	LineaGyro.integral=0;
+	Gyro.ultimoError=0;
+	Gyro.integral=0;
+	PwmBaseML.ultimoError=0;
+	PwmBaseML.integral=0;
+	PwmBaseMR.ultimoError=0;
+	PwmBaseMR.integral=0;
+	PwmObjetivo=0;
+	GyroObjetivo=0;
+	PWMbase_ML=0;
+	PWMbase_MR=0;
+	setpoint_L=0;
+	setpoint_R=0;
+	EscalonTick=0;
+}
 
 
 /* USER CODE END 4 */
