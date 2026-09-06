@@ -63,13 +63,13 @@
 
 #define NumSensores 16
 
-#define	KPLINEA 0.6
-#define	KILINEA 0.00
-#define	KDLINEA 0.0
+#define	KPLINEA 1.8
+#define	KILINEA 0.001
+#define	KDLINEA 0.001
 
-#define	KPGYRO 2.3
+#define	KPGYRO 1.9
 #define	KIGYRO 0.00
-#define	KDGYRO 0.00
+#define	KDGYRO 0.0
 
 #define KPML	1.2
 #define KIML	2
@@ -100,7 +100,7 @@ MPU6500_Init_float_t	MPU6500_Conv;
 MPU6500_status_e	MPU6500_Status;
 Motores_Init	Motor;
 PID	LineaGyro={KPLINEA,KILINEA,KDLINEA,	0,0,300,GyroMax};
-PID		Gyro= {KPGYRO,KIGYRO,KDGYRO,	0,0,300,400};
+PID		Gyro= {KPGYRO,KIGYRO,KDGYRO,	0,0,400,800};
 PID	PwmBaseML={KPML,KIML,KDML,		0,0,400,600};
 PID	PwmBaseMR={KPMR,KIMR,KDMR,		0,0,400,600};
 
@@ -257,12 +257,19 @@ int main(void)
 		 * al centro de la linea no superar -400g/s y +400 g/s o se puede cambia segun necesidad
 		 *
 		 */
+
+		if(UltimaPosicion<5 && UltimaPosicion>-5)
+		{
+			UltimaPosicion=0;
+		}
+
 		GyroObjetivo=funcion_calcularPID(&LineaGyro, 0, UltimaPosicion, 0.0015f);
 
 		/*	Con este valor recien entrar al pid que nos importa */
 
 		PwmObjetivo=funcion_calcularPID(&Gyro, GyroObjetivo, MPU6500_Conv.MPU6500_floatGZ, 0.0015f);
-
+		PWMbase_ML=270;
+		PWMbase_MR=270;
 
 		Motor.PWM_ML=(int16_t)(PWMbase_ML-PwmObjetivo);
 		Motor.PWM_MR=(int16_t)(PWMbase_MR+PwmObjetivo);
@@ -356,21 +363,21 @@ int main(void)
 		odometria.ticks_L=0;
 
 
-			PWMbase_ML=funcion_calcularPID(&PwmBaseML,setpoint_L, (float) tick_L, 0.02);
-			PWMbase_MR=funcion_calcularPID(&PwmBaseMR, setpoint_R, (float) tick_R, 0.02);
+			PWMbase_ML=0;//funcion_calcularPID(&PwmBaseML,setpoint_L, (float) tick_L, 0.02);
+			PWMbase_MR=0;//funcion_calcularPID(&PwmBaseMR, setpoint_R, (float) tick_R, 0.02);
 
 		flagTimer10ms=false;
 	}
 
 
-	if(Timer_DEBUG)
+	if(0)//Timer_DEBUG)
 	{
 
 		char buffer[30];
 		sprintf(buffer,"angulo=%0.2f ,",anguloGyro);
 		HAL_UART_Transmit(&huart3, (uint8_t *)buffer, strlen(buffer), HAL_MAX_DELAY);
 
-		DEBUG_RegletaSensores(UltimaPosicion);
+		//DEBUG_RegletaSensores(UltimaPosicion);
 		//DEBUG_IMU_Conv(MPU6500_Conv.MPU6500_floatAX,MPU6500_Conv.MPU6500_floatAY,MPU6500_Conv.MPU6500_floatAZ,MPU6500_Conv.MPU6500_floatGX,MPU6500_Conv.MPU6500_floatGY,MPU6500_Conv.MPU6500_floatGZ);
 		//DEBUG_IMU_Raw(MPU6500_Datos.MPU6500_ACCELX.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELY.MPU6500_int16,MPU6500_Datos.MPU6500_ACCELZ.MPU6500_int16,	MPU6500_Datos.MPU6500_GYROX.MPU6500_int16,MPU6500_Datos.MPU6500_GYROY.MPU6500_int16,MPU6500_Datos.MPU6500_GYROZ.MPU6500_int16);
 
@@ -379,7 +386,7 @@ int main(void)
 
 
 		//DEBUG_Encoders(odometria.ticks_L, odometria.ticks_R, 0);
-		//DEBUG_Encoders(tick_L,tick_R, 0);
+		DEBUG_Encoders(tick_L,tick_R, 0);
 		Timer_DEBUG=false;
 	}
 
@@ -392,7 +399,7 @@ int main(void)
 		case Opcion_Iniciar_CodigoA:
 			if(!validarInicio)
 			{
-				HAL_Delay(5000);
+				HAL_Delay(1000);
 				validarInicio=true;
 				enableProg=true;
 				Motor.ENABLE=true;
